@@ -1,0 +1,32 @@
+{
+  "Resources": {
+    "MyBucketF68F3FF0": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "NotificationConfiguration": {
+          "TopicConfigurations": [
+            {
+              "Event": "s3:ObjectCreated:*",
+              "Filter": {
+                "S3Key": {
+                  "Rules": [
+                    {
+                      "Name": "prefix",
+                      "Value": "files/"
+                    }
+                  ]
+                }
+              },
+              "Topic": {
+                "Ref": "MyTopic86869434"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "MyTopic86869434": {
+      "Type": "AWS::SNS::Topic"
+    }
+  }
+}

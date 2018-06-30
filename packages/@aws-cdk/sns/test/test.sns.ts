@@ -3,6 +3,7 @@ import { ArnPrincipal, PolicyStatement, resolve, Stack } from '@aws-cdk/core';
 import { EventRule } from '@aws-cdk/events';
 import { User } from '@aws-cdk/iam';
 import { InlineJavaScriptLambda } from '@aws-cdk/lambda';
+import { Bucket, EventType } from '@aws-cdk/s3';
 import { Queue } from '@aws-cdk/sqs';
 import { Test } from 'nodeunit';
 import { Topic } from '../lib';
@@ -649,6 +650,39 @@ export = {
           }
         });
 
+        test.done();
+    },
+
+    'topic can be used as bucket notification targets'(test: Test) {
+        const stack = new Stack();
+        const topic = new Topic(stack, 'MyTopic');
+        const bucket = new Bucket(stack, 'MyBucket');
+
+        bucket.onEvent(EventType.ObjectCreated, topic);
+
+        expect(stack).toMatch({
+          "Resources": {
+            "MyTopic86869434": {
+              "Type": "AWS::SNS::Topic"
+            },
+            "MyBucketF68F3FF0": {
+              "Type": "AWS::S3::Bucket",
+              "Properties": {
+                "NotificationConfiguration": {
+                  "TopicConfigurations": [
+                    {
+                      "Event": "s3:ObjectCreated:*",
+                      "Topic": {
+                        "Ref": "MyTopic86869434"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        });
+        
         test.done();
     }
 };

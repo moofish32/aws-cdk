@@ -3,6 +3,7 @@ import { AccountPrincipal, Arn, Construct, FnSelect, FnSplit, PolicyPrincipal,
 import { EventRuleTarget, IEventRuleTarget } from '@aws-cdk/events';
 import { Role } from '@aws-cdk/iam';
 import { lambda } from '@aws-cdk/resources';
+import { BucketNotificationTarget, BucketNotificationTargetType, IBucketNotificationTarget } from '@aws-cdk/s3';
 import { LambdaPermission } from './permission';
 
 /**
@@ -22,7 +23,7 @@ export interface LambdaRefProps {
     role?: Role;
 }
 
-export abstract class LambdaRef extends Construct implements IEventRuleTarget {
+export abstract class LambdaRef extends Construct implements IEventRuleTarget, IBucketNotificationTarget {
     /**
      * Creates a Lambda function object which represents a function not defined
      * within this stack.
@@ -133,6 +134,13 @@ export abstract class LambdaRef extends Construct implements IEventRuleTarget {
         return {
             id: this.name,
             arn: this.functionArn,
+        };
+    }
+
+    public get bucketNotificationTarget(): BucketNotificationTarget {
+        return {
+            type: BucketNotificationTargetType.Lambda,
+            arn: this.functionArn
         };
     }
 }

@@ -3,6 +3,7 @@ import { IIdentityResource } from '@aws-cdk/iam';
 import * as kms from '@aws-cdk/kms';
 import { s3 } from '@aws-cdk/resources';
 import { BucketPolicy } from './bucket-policy';
+import { EventType, IBucketNotificationTarget, BucketNotificationTargetType } from './notifications';
 import * as perms from './perms';
 import { LifecycleRule } from './rule';
 import { parseBucketArn, parseBucketName, validateBucketName } from './util';
@@ -257,6 +258,7 @@ export class Bucket extends BucketRef {
     protected autoCreatePolicy = true;
     private readonly lifecycleRules: LifecycleRule[] = [];
     private readonly versioned?: boolean;
+    private readonly notifications = new Array<BucketNotification>();
 
     constructor(parent: Construct, name: string, props: BucketProps = {}) {
         super(parent, name);
@@ -269,7 +271,8 @@ export class Bucket extends BucketRef {
             bucketName: props && props.bucketName,
             bucketEncryption,
             versioningConfiguration: props.versioned ? { status: 'Enabled' } : undefined,
-            lifecycleConfiguration: new Token(() => this.parseLifecycleConfiguration()),
+            lifecycleConfiguration: new Token(() => this.renderLifecycleConfiguration()),
+            notificationConfiguration: new Token(() => this.renderNotificationConfiguration())
         });
 
         applyRemovalPolicy(resource, props.removalPolicy);
@@ -299,6 +302,27 @@ export class Bucket extends BucketRef {
         }
 
         this.lifecycleRules.push(rule);
+    }
+
+    /**
+     * Adds a bucket notification event target.
+     * @param event The event to trigger the notification
+     * @param target The target (Lambda, SNS Topic or SQS Queue)
+     *
+     * @param filterRules S3 filter rules to determine which objects trigger
+     * this event. Rules must include either a prefix asterisk ("*foo/bar") or
+     * suffix asterisk ("foo/bar*") to indicate if this is a prefix or a suffix
+     * rule.
+     *
+     * @example
+     *
+     *      bucket.onEvent(EventType.OnObjectCreated, myLambda, 'home/myusername/*')
+     *
+     * @see
+     * https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
+     */
+    public onEvent(event: EventType, target: IBucketNotificationTarget, ...filterRules: string[]) {
+        this.notifications.push({ event, target, filterRules });
     }
 
     /**
@@ -353,10 +377,10 @@ export class Bucket extends BucketRef {
     }
 
     /**
-     * Parse the lifecycle configuration out of the uucket props
+     * Render the lifecycle configuration based on bucket props
      * @param props Par
      */
-    private parseLifecycleConfiguration(): s3.BucketResource.LifecycleConfigurationProperty | undefined {
+    private renderLifecycleConfiguration(): s3.BucketResource.LifecycleConfigurationProperty | undefined {
         if (!this.lifecycleRules || this.lifecycleRules.length === 0) {
             return undefined;
         }
@@ -392,6 +416,66 @@ export class Bucket extends BucketRef {
                 key: tag,
                 value: tagFilters[tag]
             }));
+        }
+    }
+
+    private renderNotificationConfiguration(): s3.BucketResource.NotificationConfigurationProperty | undefined {
+        if (this.notifications.length === 0) {
+            return undefined;
+        }
+
+        const lambda = new Array<s3.BucketResource.LambdaConfigurationProperty>();
+        const queue = new Array<s3.BucketResource.QueueConfigurationProperty>();
+        const topic = new Array<s3.BucketResource.TopicConfigurationProperty>();
+
+        for (const notification of this.notifications) {
+            const event = notification .event;
+            const filter = renderFilter(notification.filterRules);
+            const type = notification.target.bucketNotificationTarget.type;
+            const arn = notification.target.bucketNotificationTarget.arn;
+            switch (type) {
+                case BucketNotificationTargetType.Lambda:
+                    lambda.push({ event, filter, function: arn });
+                    break;
+                case BucketNotificationTargetType.Topic:
+                    topic.push({ event, filter, topic: arn });
+                    break;
+                case BucketNotificationTargetType.Queue:
+                    queue.push({ event, filter, queue: arn });
+                    break;
+                default:
+                    throw new Error('Unsupported notification target type:' + notification.target.bucketNotificationTargetType);
+            }
+        }
+
+        return {
+            lambdaConfigurations: lambda.length > 0 ? lambda : undefined,
+            queueConfigurations: queue.length > 0 ? queue : undefined,
+            topicConfigurations: topic.length > 0 ? topic : undefined
+        };
+
+        function renderFilter(rules?: string[]): s3.BucketResource.NotificationFilterProperty | undefined {
+            if (!rules || rules.length === 0) {
+                return undefined;
+            }
+
+            const renderedRules = new Array<s3.BucketResource.FilterRuleProperty>();
+
+            for (const rule of rules) {
+                if (rule.startsWith('*')) {
+                    renderedRules.push({ name: 'suffix', value: rule.substr(1) });
+                } else if (rule.endsWith('*')) {
+                    renderedRules.push({ name: 'prefix', value: rule.substr(0, rule.length - 1) });
+                } else {
+                    throw new Error('Rule must either have a "*" prefix or suffix to indicate the rule type: ' + rule);
+                }
+            }
+
+            return {
+                s3Key: {
+                    rules: renderedRules
+                }
+            };
         }
     }
 }
@@ -440,4 +524,10 @@ class ImportedBucketRef extends BucketRef {
         this.autoCreatePolicy = false;
         this.policy = undefined;
     }
+}
+
+interface BucketNotification {
+    event: EventType;
+    target: IBucketNotificationTarget;
+    filterRules?: string[];
 }

@@ -2,6 +2,8 @@ import { Arn, Construct, Output, PolicyStatement, ServicePrincipal } from '@aws-
 import { EventRuleTarget, IEventRuleTarget } from '@aws-cdk/events';
 import { IIdentityResource } from '@aws-cdk/iam';
 import { LambdaRef } from '@aws-cdk/lambda';
+import { s3 } from '@aws-cdk/resources';
+import { BucketNotificationTarget, BucketNotificationTargetType, IBucketNotificationTarget } from '@aws-cdk/s3';
 import { QueueRef } from '@aws-cdk/sqs';
 import { TopicPolicy } from './policy';
 import { Subscription, SubscriptionProtocol } from './subscription';
@@ -14,7 +16,7 @@ export class TopicArn extends Arn { }
 /**
  * Either a new or imported Topic
  */
-export abstract class TopicRef extends Construct implements IEventRuleTarget {
+export abstract class TopicRef extends Construct implements IEventRuleTarget, IBucketNotificationTarget {
     /**
      * Import a Topic defined elsewhere
      */
@@ -38,6 +40,12 @@ export abstract class TopicRef extends Construct implements IEventRuleTarget {
      * notifications to this topic have been added.
      */
     private eventRuleTargetPolicyAdded = false;
+
+    /**
+     * Indicates if the resource policy which allows S3 buckets to publish
+     * notifications for events has been added to the policy.
+     */
+    private bucketNotificationTargetPolicyAdded = new Set<s3.BucketArn>();
 
     /**
      * Export this Topic
@@ -214,6 +222,21 @@ export abstract class TopicRef extends Construct implements IEventRuleTarget {
         return {
             id: this.name,
             arn: this.topicArn,
+        };
+    }
+
+    public bucketNotificationTarget(bucketArn: s3.BucketArn): BucketNotificationTarget {
+        if (!this.bucketNotificationTargetPolicyAdded) {
+            this.addToResourcePolicy(new PolicyStatement()
+                .addAction('sns:Publish')
+                .addPrincipal(new ServicePrincipal('s3.amazonaws.com'))
+                .addResource(this.topicArn)
+                .addCondition('ArnLike', { 'aws:SourceArn': bucketArn }));
+        }
+
+        return {
+            type: BucketNotificationTargetType.Topic,
+            arn: this.topicArn
         };
     }
 }

@@ -1,0 +1,36 @@
+{
+  "Resources": {
+    "TestBucket560B80BC": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "NotificationConfiguration": {
+          "TopicConfigurations": [
+            {
+              "Event": "s3:ObjectCreated:*",
+              "Filter": {
+                "S3Key": {
+                  "Rules": [
+                    {
+                      "Name": "prefix",
+                      "Value": "images/"
+                    },
+                    {
+                      "Name": "suffix",
+                      "Value": ".jpg"
+                    }
+                  ]
+                }
+              },
+              "Topic": {
+                "Ref": "Topic"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Topic": {
+      "Type": "AWS::SNS::Topic"
+    }
+  }
+}
