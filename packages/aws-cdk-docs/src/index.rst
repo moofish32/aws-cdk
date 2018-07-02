@@ -17,6 +17,7 @@ User Guide
 .. toctree::
    Welcome <welcome>
    Getting Started <getting-started>
+   Common Tasks <howto>
    Developing Libraries <guidelines>
    Examples <examples>
    Concepts <concepts>
