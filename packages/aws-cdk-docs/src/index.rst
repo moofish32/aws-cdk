@@ -19,8 +19,10 @@ User Guide
 
    Welcome <welcome>
    Getting Started <getting-started>
-   Concepts <concepts>
+   Common Tasks <howto>
+   Developing Libraries <guidelines>
    Examples <examples>
+   Concepts <concepts>
    Tools <tools>
    Advanced Topics <cloudformation>
    Glossary <glossary>
