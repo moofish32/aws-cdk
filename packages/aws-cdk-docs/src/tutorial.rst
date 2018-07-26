@@ -83,20 +83,8 @@ This creates a skeleton |cdk| app with the following files and directories (fold
 
 .. _step_two:
 
-Step Two: Install the |cdk| libraries
-=====================================
-
-Run the following command to install the |S3|,
-|APIGATEWAY|, and ??? libraries:
-
-.. code-block: sh
-
-   y-npm i @aws-cdk/s3 @aws-cdk/apigateway
-
-.. _step_three:
-
-Step Three: Create an Apple Service
-===================================
+Step Two: Create an Apple Service
+=================================
 
 Create a *lib* directory at the same level as the *bin* directory,
 then create the file *AppleService.js* in the *lib* directory
@@ -137,11 +125,18 @@ Step Four: Add an |S3| Bucket to the Apple Service
 Our service is pretty useless, so to make it useful,
 add an |S3| bucket to the service so we can store our apples.
 
+Run the following command to install the core
+|S3| library:
+
+.. code-block: sh
+
+   y-npm i @aws-cdk/aws-s3
+
 Add the following **import** statement to *apple_service.ts*:
 
 .. code-block: ts
 
-   import { Bucket } from '@aws-cdk/s3';
+   import { Bucket } from '@aws-cdk/aws-s3';
 
 And add the following code to the end of the constructor for the **AppleService** class:
 
@@ -179,22 +174,38 @@ calculates to ensure that the resource is unique:
 
 .. _step_five:
 
-Step Five: Add an |APIGATEWAY| ??? to the Apple Service
+Step Five: Add |ABP| ??? to the Apple Service
 =======================================================
 
-Add an |APIGATEWAY| ??? to the service so we can ???.
+Add |AGP| to the service so we can ???.
+
+Run the following command to install the
+|ABP| library:
+
+.. code-block: sh
+
+   y-npm i @aws-cdk/aws-apigateway
 
 Add the following **import** statement to *apple_service.ts*:
 
 .. code-block: ts
 
-   import { Api } from '@aws-cdk/apigateway';
+   import { cloudformation } from '@aws-cdk/aws-apigateway';
 
 And add the following code to the end of the constructor for the **AppleService** class:
 
 .. code-block: ts
 
-   new Bucket(this, 'AppleStore');
+   new cloudformation.RestApiResource(this, 'ApplesApi', {
+       restApiName: 'Apple Service',
+       description: 'Serves up apples'
+   })
+
+   const servicePrincipal = new ServicePrincipal('apigateway.amazon.com');
+
+   new Role(this, 'IntegrationRole', {
+       assumedBy: servicePrincipal
+   });
 
 Let's see what we have so far.
 Run the following command to see the current |CFN| template:
@@ -202,3 +213,70 @@ Run the following command to see the current |CFN| template:
 .. code-block: sh
 
    cdk synth
+
+You should see something like the following:
+
+.. code-block: yaml
+
+   ???
+
+.. _step_six:
+
+Step Six: Add a |LAMBDA| Function to the Apple Service
+======================================================
+
+Create the *resource* directory and the file *apples.js* in that directory
+with the following content:
+
+.. code-block: js
+
+   // apple.js
+   const AWS = require('aws-sdk');
+   const S3 = new AWS.S3();
+
+   const bucketName = process.env.BUCKET;
+
+   exports.main = function(event, context, callback) {
+       switch (event.operation) {
+           case "list":
+               S3.listObjectsV2({ Bucket: bucketName })
+                   .promise()
+                   .then(function(data) {
+                       callback(null, { apples: data.Contents.map(function(e) { return e.Key }) });
+                   })
+                   .catch(rejectedPromise);
+               break;
+           case "create":
+               S3.putObject({
+                   Bucket: bucketName,
+                   Key: event.apple.name,
+                   Body: JSON.stringify(event.apple, null, 2),
+                   ContentType: 'application/json'
+               }).promise()
+                   .then(function() { callback(null, event.apple); })
+                   .catch(rejectedPromise);
+               break;
+           case "show":
+               S3.getObject({ Bucket: bucketName, Key: event.name})
+                   .promise()
+                   .then(function(data) {
+                       callback(null, JSON.parse(data.Body.toString('utf-8')));
+               })
+               .catch(rejectedPromise);
+               break;
+           case "delete":
+               S3.deleteObject({ Bucket: bucketName, Key: event.name })
+                   .promise()
+                   .then(function(data) {
+                       callback(null, { success: true });
+               })
+               .catch(rejectedPromise);
+               break;
+           default:
+               return callback("Unknown operation: " + event.operation, null);
+       }
+
+       function rejectedPromise(error) {
+           callback(error.stack || JSON.stringify(error, null, 2), null);
+       }
+   }
