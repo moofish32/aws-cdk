@@ -136,6 +136,13 @@ export interface AutoScalingGroupProps {
  *
  * The ASG spans all availability zones.
  */
+
+export interface AutoScalingGroupResources {
+    autoScalingGroup: cloudformation.AutoScalingGroupResource;
+    launchConfiguration: cloudformation.LaunchConfigurationResource;
+    instanceProfile: iam.cloudformation.InstanceProfileResource;
+}
+
 export class AutoScalingGroup extends cdk.Construct implements elb.ILoadBalancerTarget, ec2.IConnectable {
     /**
      * The type of OS instances of this fleet are running.
@@ -151,6 +158,8 @@ export class AutoScalingGroup extends cdk.Construct implements elb.ILoadBalancer
      * The IAM role assumed by instances of this fleet.
      */
     public readonly role: iam.Role;
+
+    public readonly cloudformationResources: AutoScalingGroupResources;
 
     private readonly userDataLines = new Array<string>();
     private readonly autoScalingGroup: cloudformation.AutoScalingGroupResource;
@@ -229,6 +238,11 @@ export class AutoScalingGroup extends cdk.Construct implements elb.ILoadBalancer
         this.osType = machineImage.os.type;
 
         this.applyUpdatePolicies(props);
+        this.cloudformationResources = {
+            autoScalingGroup:  this.autoScalingGroup,
+            instanceProfile: iamProfile,
+            launchConfiguration: launchConfig,
+        };
     }
 
     /**
