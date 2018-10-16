@@ -4,6 +4,7 @@ import { CloudFormationToken } from './cloudformation-token';
 import { Condition } from './condition';
 import { CreationPolicy, DeletionPolicy, UpdatePolicy } from './resource-policy';
 import { IDependable, Referenceable, StackElement } from './stack';
+import { TagManager } from '../core/tag-manager';
 
 export interface ResourceProps {
   /**
@@ -46,6 +47,8 @@ export class Resource extends Referenceable {
    * AWS resource type.
    */
   public readonly resourceType: string;
+
+  public readonly tags: TagManager | undefined;
 
   /**
    * AWS resource property overrides.
@@ -91,6 +94,13 @@ export class Resource extends Referenceable {
     // as 'name', but we don't want it to be serialized into the template.
     if (this.properties.name) {
       delete this.properties.name;
+    }
+
+    if (this.properties.hasOwnProperty('tags')) {
+      if (this.properties.Tags !== undefined) {
+        this.tags = new TagManager(parent);
+        this.properties.Tags = this.tags;
+      }
     }
   }
 
